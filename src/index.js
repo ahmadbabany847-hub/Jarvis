@@ -1,6 +1,6 @@
 const TEXT_MODEL = "@cf/google/gemma-4-26b-a4b-it";
 const STT_MODEL = "@cf/openai/whisper-large-v3-turbo";
-const REALTIME_MODEL = "gpt-realtime-2";
+const REALTIME_MODEL = "gpt-realtime-2.1";
 
 export default {
   async fetch(request, env) {
@@ -53,6 +53,14 @@ export default {
           instructions:
             "You are JARVIS, a natural realtime voice assistant. Speak mainly in Sorani Kurdish unless the user asks for another language. Keep replies concise, friendly, and conversational. Let the user interrupt you naturally.",
           audio: {
+            input: {
+              turn_detection: {
+                type: "semantic_vad",
+                eagerness: "auto",
+                create_response: true,
+                interrupt_response: true
+              }
+            },
             output: {
               voice: "marin"
             }
