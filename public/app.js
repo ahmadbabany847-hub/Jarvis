@@ -940,6 +940,10 @@ function parsePcCommand(text) {
     return { action: "screenshot", target: "" };
   }
 
+  if (/lock (the )?(pc|computer)|bilgisayarı kilitle|قفّل الكمبيوتر|کۆمپیوتەر قوفڵ|verrouille l'ordinateur|bloquea el ordenador/.test(raw)) {
+    return { action: "lock", target: "" };
+  }
+
   return null;
 }
 
