@@ -31,8 +31,11 @@
     form{display:flex;gap:8px;align-items:center;padding:5px 0}
     input{flex:1;min-width:0;background:#0b1219;border:1px solid #1c2b36;color:#fff;border-radius:24px;padding:13px 16px;font-size:16px;outline:none}
     button{cursor:pointer}
-    .round,.send{width:46px;height:46px;border-radius:50%;border:1px solid #223441;color:#e6f5ff;font-size:18px}
-    .round{background:#0a1219}.send{background:#12384d;border-color:#27617d}
+    .round,.send{width:46px;height:46px;border-radius:50%;border:1px solid #223441;color:#e6f5ff;font-size:18px;flex:0 0 auto}
+    .round{background:#0a1219}
+    .round.active{background:#0d806f;border-color:#25e0c0;box-shadow:0 0 22px rgba(37,224,192,.28)}
+    .send{background:#12384d;border-color:#27617d}
+    .voice-tools{display:flex;gap:8px;direction:ltr}
     .status{text-align:center;color:#536b7b;font-size:10px;min-height:16px}
   </style>
 </head>
@@ -52,7 +55,7 @@
     <section id="chat">
       <div class="welcome" id="welcome">
         <h2>سڵاو، من JARVIS ـم.</h2>
-        <p>فەرمانەکەت بنووسە یان بە دەنگ بڵێ.</p>
+        <p>بنووسە، دەنگ بکە بە نووسین، یان Live Voice بەکاربهێنە.</p>
       </div>
     </section>
 
@@ -64,11 +67,14 @@
     </section>
 
     <form id="form">
-      <button id="mic" type="button" class="round">🎙️</button>
+      <div class="voice-tools">
+        <button id="dictation" type="button" class="round" aria-label="Voice typing" title="Voice typing">🎙️</button>
+        <button id="liveVoice" type="button" class="round" aria-label="Live voice" title="Live voice">◉</button>
+      </div>
       <input id="input" autocomplete="off" placeholder="فەرمانەکەت بنووسە..." />
       <button type="submit" class="send">➤</button>
     </form>
-    <div id="status" class="status">JARVIS ئامادەیە</div>
+    <div id="status" class="status">🎙️ = نووسین بە دەنگ   ◉ = گفتوگۆی ڕاستەوخۆ</div>
   </main>
   <script src="/app.js"></script>
 </body>
