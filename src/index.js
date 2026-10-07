@@ -1,6 +1,6 @@
 const TEXT_MODEL = "@cf/google/gemma-4-26b-a4b-it";
 const STT_MODEL = "@cf/openai/whisper-large-v3-turbo";
-const REALTIME_MODEL = "gpt-realtime-2.1";
+const REALTIME_MODEL = "gpt-realtime-2";
 
 export default {
   async fetch(request, env) {
@@ -50,18 +50,9 @@ export default {
         const session = {
           type: "realtime",
           model: REALTIME_MODEL,
-          output_modalities: ["audio"],
           instructions:
-            "You are JARVIS, a natural realtime voice assistant. Speak mainly in Sorani Kurdish unless the user asks for another language. Keep replies concise, friendly, and conversational. Let the user interrupt you naturally. Help with coding, projects, databases, planning, and general questions.",
+            "You are JARVIS, a natural realtime voice assistant. Speak mainly in Sorani Kurdish unless the user asks for another language. Keep replies concise, friendly, and conversational. Let the user interrupt you naturally.",
           audio: {
-            input: {
-              turn_detection: {
-                type: "semantic_vad",
-                eagerness: "auto",
-                create_response: true,
-                interrupt_response: true
-              }
-            },
             output: {
               voice: "marin"
             }
@@ -86,10 +77,23 @@ export default {
 
         if (!openaiResponse.ok) {
           const details = await openaiResponse.text();
-          return new Response(details || "Realtime session failed", {
-            status: openaiResponse.status,
-            headers: { "content-type": "text/plain; charset=utf-8" }
-          });
+          let message = details;
+          try {
+            const parsed = JSON.parse(details);
+            message = parsed?.error?.message || parsed?.message || details;
+          } catch {}
+
+          return Response.json(
+            {
+              code:
+                openaiResponse.status === 401 ? "invalid_key" :
+                openaiResponse.status === 429 ? "quota_or_rate_limit" :
+                "openai_realtime_error",
+              status: openaiResponse.status,
+              error: message || "Realtime session failed"
+            },
+            { status: openaiResponse.status }
+          );
         }
 
         return new Response(await openaiResponse.text(), {
