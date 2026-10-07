@@ -13,12 +13,19 @@ export default {
           return Response.json({ error: "No audio received" }, { status: 400 });
         }
 
+        const requestedLanguage = request.headers.get("x-jarvis-language") || "auto";
+        const prompt =
+          requestedLanguage === "tr"
+            ? "The speaker is speaking Turkish. Transcribe natural Turkish accurately."
+            : requestedLanguage === "ku"
+              ? "The speaker is speaking Sorani Kurdish. Transcribe Sorani Kurdish accurately."
+              : "The speaker may speak Sorani Kurdish, Arabic, Turkish, or English.";
+
         const result = await env.AI.run(STT_MODEL, {
           audio: arrayBufferToBase64(audioBuffer),
           task: "transcribe",
           vad_filter: true,
-          initial_prompt:
-            "The speaker may speak Sorani Kurdish, Arabic, Turkish, or English."
+          initial_prompt: prompt
         });
 
         const text =
@@ -43,12 +50,22 @@ export default {
           ? body.messages.slice(-20)
           : [];
 
+        const language = String(body.language || "auto");
+        const languageInstruction =
+          language === "tr"
+            ? "Always reply in natural Turkish unless the user explicitly asks for another language."
+            : language === "ku"
+              ? "Always reply in Sorani Kurdish unless the user explicitly asks for another language."
+              : "Reply in the same language the user is using unless they explicitly ask for another language.";
+
         const result = await env.AI.run(TEXT_MODEL, {
           messages: [
             {
               role: "system",
               content:
-                "You are JARVIS, a natural conversational voice assistant. Reply in the same language the user is using unless they explicitly ask for another language. Keep replies short, warm, and easy to speak aloud. Do not use markdown unless needed."
+                "You are JARVIS, a natural conversational voice assistant. " +
+                languageInstruction +
+                " Keep replies short, warm, and easy to speak aloud. Do not use markdown unless needed."
             },
             ...incoming
           ],
