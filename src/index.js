@@ -51,6 +51,8 @@ export default {
           : [];
 
         const language = String(body.language || "auto");
+        const voiceMode = Boolean(body.voiceMode);
+
         const languageInstruction =
           language === "tr"
             ? "Always reply in natural Turkish unless the user explicitly asks for another language."
@@ -58,13 +60,21 @@ export default {
               ? "Always reply in Sorani Kurdish unless the user explicitly asks for another language."
               : "Reply in the same language the user is using unless they explicitly ask for another language.";
 
+        const voiceInstruction = voiceMode
+          ? (
+              language === "tr"
+                ? "This answer will be spoken aloud. Use natural everyday Turkish, short clauses, conversational punctuation, contractions where natural, and human-like rhythm. Avoid markdown, headings, numbered lists, symbols, and stiff formal wording unless requested. Write exactly as a native Turkish speaker would naturally say it."
+                : "This answer will be spoken aloud. Use short conversational sentences, natural punctuation, and avoid markdown or stiff formal wording unless requested."
+            )
+          : "";
+
         const result = await env.AI.run(TEXT_MODEL, {
           messages: [
             {
               role: "system",
               content:
                 "You are JARVIS, a natural conversational voice assistant. " +
-                languageInstruction +
+                languageInstruction + " " + voiceInstruction +
                 " Keep replies short, warm, and easy to speak aloud. Do not use markdown unless needed."
             },
             ...incoming
