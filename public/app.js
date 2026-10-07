@@ -883,38 +883,61 @@ window.addEventListener("load", () => setTimeout(updateVoiceQualityHint, 300));
 
 function parsePcCommand(text) {
   const raw = String(text || "").toLowerCase().trim();
-  const t = raw
-    .replace(/[.,!?;:]+/g, " ")
-    .replace(/\b(please|the|a|an|for me|can you|could you|would you)\b/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const t = raw.replace(/[.,!?;:]+/g, " ").replace(/\s+/g, " ").trim();
 
-  const hasOpenVerb =
-    /\b(open|launch|start|run)\b/.test(t) ||
-    /\b(aç|açar mısın|açarmısın|başlat|çalıştır)\b/.test(raw) ||
-    /(بکەرەوە|بکەوە|بکەرەوەی)/.test(raw);
+  const wantsOpen =
+    /\b(open|launch|start|run|aç|başlat|çalıştır|ouvrir|abre|abrir|öffnen|apri|открой|افتح|باز کن)\b/.test(t) ||
+    /(بکەرەوە|بکەوە)/.test(raw);
 
-  const target =
-    /\b(notepad|not defteri|not defterini)\b/.test(t)
-      ? "notepad"
-      : /\b(calculator|hesap makinesi|hesap makinesini)\b/.test(t)
-        ? "calculator"
-        : /\b(file explorer|explorer|dosya gezgini|dosya gezginini)\b/.test(t)
-          ? "explorer"
-          : /\b(settings|ayarlar|ayarları)\b/.test(t)
-            ? "settings"
-            : /(نۆتپاد|نۆت پاد)/.test(raw)
-              ? "notepad"
-              : /(کالکیولەیتەر|حیسابکەر)/.test(raw)
-                ? "calculator"
-                : /(فایل ئێکسپلۆرەر|فایل ئەکسپلۆرەر)/.test(raw)
-                  ? "explorer"
-                  : /(سێتینگ|ڕێکخستنەکان)/.test(raw)
-                    ? "settings"
-                    : null;
+  const appRules = [
+    ["notepad", /notepad|not defteri|نۆتپاد|نۆت پاد|المفكرة|bloc-notes|bloc de notas/],
+    ["calculator", /calculator|hesap makinesi|کالکیولەیتەر|حیسابکەر|الحاسبة|calculatrice|rechner|calculadora/],
+    ["explorer", /file explorer|explorer|dosya gezgini|فایل ئێکسپلۆرەر|فایل ئەکسپلۆرەر|مستكشف الملفات/],
+    ["settings", /settings|ayarlar|سێتینگ|ڕێکخستنەکان|الإعدادات|paramètres|einstellungen|configuración/],
+    ["paint", /paint|mspaint|الرسم/],
+    ["task_manager", /task manager|görev yöneticisi|مدير المهام/],
+    ["control_panel", /control panel|denetim masası|لوحة التحكم/],
+    ["chrome", /chrome|google chrome/],
+    ["edge", /microsoft edge|\bedge\b/],
+    ["vscode", /visual studio code|vs code|vscode/],
+    ["word", /microsoft word|\bword\b/],
+    ["excel", /microsoft excel|\bexcel\b/],
+    ["powerpoint", /powerpoint|power point/]
+  ];
 
-  if (hasOpenVerb && target) {
-    return { type: "open-app", app: target };
+  if (wantsOpen) {
+    for (const [target, pattern] of appRules) {
+      if (pattern.test(raw)) return { action: "open_app", target };
+    }
+
+    const siteRules = [
+      ["google", /\bgoogle\b/],
+      ["youtube", /youtube/],
+      ["github", /github/],
+      ["gmail", /gmail/],
+      ["cloudflare", /cloudflare/],
+      ["chatgpt", /chatgpt|chat gpt/]
+    ];
+
+    for (const [target, pattern] of siteRules) {
+      if (pattern.test(raw)) return { action: "open_site", target };
+    }
+  }
+
+  if (/volume up|increase volume|sesi aç|sesi yükselt|دەنگ زیاد|ارفع الصوت|augmente le volume|sube el volumen/.test(raw)) {
+    return { action: "volume_up", target: "" };
+  }
+
+  if (/volume down|decrease volume|sesi kıs|sesi azalt|دەنگ کەم|اخفض الصوت|baisse le volume|baja el volumen/.test(raw)) {
+    return { action: "volume_down", target: "" };
+  }
+
+  if (/\bmute\b|sessize al|sesi kapat|بێدەنگ|اكتم الصوت|coupe le son|silencio/.test(raw)) {
+    return { action: "mute", target: "" };
+  }
+
+  if (/screenshot|screen shot|ekran görüntüsü|سكرين شوت|وێنەی شاشە|capture d'écran|captura de pantalla/.test(raw)) {
+    return { action: "screenshot", target: "" };
   }
 
   return null;
@@ -957,31 +980,31 @@ async function checkPcAgent() {
 
 async function runPcCommand(command) {
   try {
-    if (command.type === "open-app") {
-      const r = await pcFetch("/open-app", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ app: command.app })
-      });
+    const r = await pcFetch("/action", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: command.action,
+        target: command.target || ""
+      })
+    });
 
-      const data = await r.json();
-      const ok = Boolean(r.ok && data.ok);
+    const data = await r.json();
+    const ok = Boolean(r.ok && data.ok);
 
-      if (pcStatusEl) {
-        pcStatusEl.textContent = ok
-          ? "🟢 PC Agent پەیوەستە"
-          : "🔴 PC Agent هەڵەی هەیە";
-      }
-
-      return ok;
+    if (pcStatusEl) {
+      pcStatusEl.textContent = ok
+        ? "🟢 PC Agent پەیوەستە"
+        : "🔴 PC Agent هەڵەی هەیە";
     }
+
+    return ok;
   } catch {
     if (pcStatusEl) {
       pcStatusEl.textContent = "🔴 PC Agent پەیوەست نییە";
     }
+    return false;
   }
-
-  return false;
 }
 
 testPcBtn?.addEventListener("click", checkPcAgent);
