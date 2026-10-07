@@ -89,10 +89,10 @@ async function askJarvis(text, { speak = false } = {}) {
     if (ok) {
       const reply =
         preferredLanguage === "tr"
-          ? "Tamam, bilgisayarda açtım."
+          ? "Tamam, bilgisayarında yaptım."
           : preferredLanguage === "auto"
-            ? "Done. I opened it on your computer."
-            : "تەواو، لە کۆمپیوتەرەکەت کردمەتەوە.";
+            ? "Done on your computer."
+            : "تەواو، لە کۆمپیوتەرەکەت ئەنجامم دا.";
 
       add(reply, "ai");
       if (speak) await speakText(reply);
