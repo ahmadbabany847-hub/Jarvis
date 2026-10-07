@@ -40,6 +40,25 @@
     .send{background:#12384d;border-color:#27617d}
     .voice-tools{display:flex;gap:8px;direction:ltr}
     .status{text-align:center;color:#536b7b;font-size:10px;min-height:16px}
+    .header-actions{display:flex;align-items:center;gap:8px}
+    .icon-btn{width:42px;height:42px;border-radius:50%;border:1px solid #223441;background:#0a1219;color:#e6f5ff;font-size:18px}
+    .settings-modal{position:fixed;inset:0;background:rgba(0,0,0,.68);display:none;align-items:flex-end;justify-content:center;padding:14px;z-index:50}
+    .settings-modal.open{display:flex}
+    .settings-sheet{width:min(100%,720px);max-height:88dvh;overflow:auto;background:#0a1118;border:1px solid #20303d;border-radius:24px 24px 14px 14px;padding:16px;box-shadow:0 20px 70px rgba(0,0,0,.45)}
+    .settings-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+    .settings-head h3{margin:0;font-size:18px}
+    .settings-section{border-top:1px solid #1d2c38;padding:14px 0}
+    .settings-section:first-of-type{border-top:0}
+    .settings-section h4{margin:0 0 10px;font-size:14px}
+    .settings-section p{margin:6px 0;color:#7f94a5;font-size:12px;line-height:1.6}
+    .settings-section label{display:block;color:#9eb4c5;font-size:12px;margin:10px 0 6px}
+    .settings-section input,.settings-section select{width:100%;background:#081018;border:1px solid #223441;color:#eef7ff;border-radius:12px;padding:11px 12px;font-size:14px}
+    .settings-section input[type="range"]{padding:0}
+    .settings-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .settings-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .settings-actions button{border:1px solid #27536a;background:#103243;color:#eef7ff;border-radius:12px;padding:10px 12px}
+    .settings-actions .danger{border-color:#5a2c35;background:#28151a}
+    .local-note{padding:9px 10px;border-radius:10px;background:#0d171f;border:1px solid #1d2c38;color:#78909f;font-size:11px}
   </style>
 </head>
 <body>
@@ -52,7 +71,9 @@
           <div class="online"><b></b> Online</div>
         </div>
       </div>
-      <div>AI</div>
+      <div class="header-actions">
+        <button id="settingsBtn" class="icon-btn" type="button" aria-label="Settings">⚙️</button>
+      </div>
     </header>
 
     <section id="chat">
@@ -84,9 +105,56 @@
       <button type="submit" class="send">➤</button>
     </form>
 
-    <div id="status" class="status">v-freevoice-2 • ◉ = گفتوگۆی دەنگی بێ پارە</div>
+    <div id="status" class="status">v-settings-1 • ⚙️ Settings + Voice + Account</div>
   </main>
 
-  <script src="/app.js?v=20261008-freevoice-2"></script>
+  <div id="settingsModal" class="settings-modal" aria-hidden="true">
+    <div class="settings-sheet">
+      <div class="settings-head">
+        <h3>⚙️ Settings</h3>
+        <button id="closeSettings" class="icon-btn" type="button">✕</button>
+      </div>
+
+      <section class="settings-section">
+        <h4>🔊 دەنگ</h4>
+        <label for="voiceSelect">دەنگ هەڵبژێرە</label>
+        <select id="voiceSelect"></select>
+
+        <div class="settings-row">
+          <div>
+            <label for="voiceRate">خێرایی <span id="voiceRateValue">0.92</span></label>
+            <input id="voiceRate" type="range" min="0.70" max="1.25" step="0.01" value="0.92">
+          </div>
+          <div>
+            <label for="voicePitch">قووڵی دەنگ <span id="voicePitchValue">0.88</span></label>
+            <input id="voicePitch" type="range" min="0.60" max="1.30" step="0.01" value="0.88">
+          </div>
+        </div>
+
+        <div class="settings-actions">
+          <button id="testVoice" type="button">▶️ تاقیکردنەوەی دەنگ</button>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <h4>👤 هەژمار</h4>
+        <label for="accountName">ناو</label>
+        <input id="accountName" type="text" autocomplete="name" placeholder="ناوت">
+
+        <label for="accountEmail">ئیمەیڵ</label>
+        <input id="accountEmail" type="email" autocomplete="email" placeholder="name@example.com">
+
+        <p id="accountStatus">هێشتا هەژمارێکت نییە لەم ئامێرە</p>
+        <div class="local-note">ئەم وەشانە هەژمارەکە لەسەر هەمان ئامێر پارێزراو دەکات. هەژماری cloud ـی ڕاستەقینە بۆ sync لە چەند ئامێرێک پێویستی بە database هەیە.</div>
+
+        <div class="settings-actions">
+          <button id="saveAccount" type="button">دروستکردنی هەژمار</button>
+          <button id="logoutAccount" class="danger" type="button" hidden>چوونەدەرەوە</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script src="/app.js?v=20261008-settings-1"></script>
 </body>
 </html>
