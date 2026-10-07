@@ -5,8 +5,26 @@ const dictationBtn = document.getElementById("dictation");
 const liveBtn = document.getElementById("liveVoice");
 const statusEl = document.getElementById("status");
 const welcome = document.getElementById("welcome");
+const settingsBtn = document.getElementById("settingsBtn");
+const settingsModal = document.getElementById("settingsModal");
+const closeSettingsBtn = document.getElementById("closeSettings");
+const voiceSelect = document.getElementById("voiceSelect");
+const voiceRate = document.getElementById("voiceRate");
+const voicePitch = document.getElementById("voicePitch");
+const voiceRateValue = document.getElementById("voiceRateValue");
+const voicePitchValue = document.getElementById("voicePitchValue");
+const testVoiceBtn = document.getElementById("testVoice");
+const accountName = document.getElementById("accountName");
+const accountEmail = document.getElementById("accountEmail");
+const saveAccountBtn = document.getElementById("saveAccount");
+const logoutAccountBtn = document.getElementById("logoutAccount");
+const accountStatus = document.getElementById("accountStatus");
 const history = [];
+
 let preferredLanguage = localStorage.getItem("jarvis-language") || "auto";
+let preferredVoiceURI = localStorage.getItem("jarvis-voice-uri") || "";
+let preferredRate = Number(localStorage.getItem("jarvis-voice-rate") || "0.92");
+let preferredPitch = Number(localStorage.getItem("jarvis-voice-pitch") || "0.88");
 
 let dictationRecorder = null;
 let dictationStream = null;
@@ -441,19 +459,15 @@ async function speakText(text) {
         : detectSpeechLanguage(text);
 
   const voices = await getSpeechVoices();
-  const voice = chooseVoice(voices, language);
+  const savedVoice = voices.find(v => v.voiceURI === preferredVoiceURI);
+  const voice = savedVoice || chooseVoice(voices, language);
 
   return new Promise(resolve => {
     const utterance = new SpeechSynthesisUtterance(cleanSpeechText(text));
     utterance.lang = language;
 
-    if (preferredLanguage === "tr") {
-      utterance.rate = 0.92;
-      utterance.pitch = 0.88;
-    } else {
-      utterance.rate = 0.98;
-      utterance.pitch = 0.92;
-    }
+    utterance.rate = preferredRate;
+    utterance.pitch = preferredPitch;
 
     if (voice) utterance.voice = voice;
 
@@ -564,3 +578,149 @@ document.querySelectorAll("[data-language]").forEach(btn => {
 });
 
 updateLanguageUI();
+
+
+function populateVoiceSelect() {
+  if (!voiceSelect || !("speechSynthesis" in window)) return;
+
+  const voices = window.speechSynthesis.getVoices();
+  const current = preferredVoiceURI;
+  voiceSelect.innerHTML = "";
+
+  if (!voices.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "هیچ دەنگێک نەدۆزرایەوە";
+    voiceSelect.appendChild(option);
+    return;
+  }
+
+  const sorted = [...voices].sort((a, b) => {
+    const aTr = (a.lang || "").toLowerCase().startsWith("tr") ? 0 : 1;
+    const bTr = (b.lang || "").toLowerCase().startsWith("tr") ? 0 : 1;
+    if (aTr !== bTr) return aTr - bTr;
+    return (a.name || "").localeCompare(b.name || "");
+  });
+
+  for (const voice of sorted) {
+    const option = document.createElement("option");
+    option.value = voice.voiceURI;
+    option.textContent = `${voice.name} — ${voice.lang}`;
+    if (voice.voiceURI === current) option.selected = true;
+    voiceSelect.appendChild(option);
+  }
+
+  if (!current) {
+    const language = preferredLanguage === "tr" ? "tr-TR" : preferredLanguage === "ku" ? "ku" : "en-US";
+    const best = chooseVoice(sorted, language);
+    if (best) {
+      voiceSelect.value = best.voiceURI;
+      preferredVoiceURI = best.voiceURI;
+      localStorage.setItem("jarvis-voice-uri", preferredVoiceURI);
+    }
+  }
+}
+
+function openSettings() {
+  if (!settingsModal) return;
+  populateVoiceSelect();
+  loadAccountUI();
+
+  if (voiceRate) voiceRate.value = String(preferredRate);
+  if (voicePitch) voicePitch.value = String(preferredPitch);
+  if (voiceRateValue) voiceRateValue.textContent = preferredRate.toFixed(2);
+  if (voicePitchValue) voicePitchValue.textContent = preferredPitch.toFixed(2);
+
+  settingsModal.classList.add("open");
+  settingsModal.setAttribute("aria-hidden", "false");
+}
+
+function closeSettings() {
+  settingsModal?.classList.remove("open");
+  settingsModal?.setAttribute("aria-hidden", "true");
+}
+
+function loadAccountUI() {
+  const profile = JSON.parse(localStorage.getItem("jarvis-local-account") || "null");
+
+  if (profile) {
+    accountName.value = profile.name || "";
+    accountEmail.value = profile.email || "";
+    accountStatus.textContent = `چوویتە ژوورەوە وەک ${profile.name || profile.email || "User"}`;
+    logoutAccountBtn.hidden = false;
+    saveAccountBtn.textContent = "نوێکردنەوەی هەژمار";
+  } else {
+    accountName.value = "";
+    accountEmail.value = "";
+    accountStatus.textContent = "هێشتا هەژمارێکت نییە لەم ئامێرە";
+    logoutAccountBtn.hidden = true;
+    saveAccountBtn.textContent = "دروستکردنی هەژمار";
+  }
+}
+
+function saveLocalAccount() {
+  const name = accountName.value.trim();
+  const email = accountEmail.value.trim();
+
+  if (!name || !email) {
+    accountStatus.textContent = "ناو و ئیمەیڵ پڕ بکەرەوە";
+    return;
+  }
+
+  const profile = {
+    name,
+    email,
+    createdAt: new Date().toISOString()
+  };
+
+  localStorage.setItem("jarvis-local-account", JSON.stringify(profile));
+  accountStatus.textContent = `هەژمارەکەت دروست بوو: ${name}`;
+  logoutAccountBtn.hidden = false;
+  saveAccountBtn.textContent = "نوێکردنەوەی هەژمار";
+}
+
+function logoutLocalAccount() {
+  localStorage.removeItem("jarvis-local-account");
+  loadAccountUI();
+}
+
+settingsBtn?.addEventListener("click", openSettings);
+closeSettingsBtn?.addEventListener("click", closeSettings);
+settingsModal?.addEventListener("click", e => {
+  if (e.target === settingsModal) closeSettings();
+});
+
+voiceSelect?.addEventListener("change", () => {
+  preferredVoiceURI = voiceSelect.value;
+  localStorage.setItem("jarvis-voice-uri", preferredVoiceURI);
+});
+
+voiceRate?.addEventListener("input", () => {
+  preferredRate = Number(voiceRate.value);
+  localStorage.setItem("jarvis-voice-rate", String(preferredRate));
+  voiceRateValue.textContent = preferredRate.toFixed(2);
+});
+
+voicePitch?.addEventListener("input", () => {
+  preferredPitch = Number(voicePitch.value);
+  localStorage.setItem("jarvis-voice-pitch", String(preferredPitch));
+  voicePitchValue.textContent = preferredPitch.toFixed(2);
+});
+
+testVoiceBtn?.addEventListener("click", async () => {
+  const sample =
+    preferredLanguage === "tr"
+      ? "Merhaba, ben JARVIS. Türkçe ses testi yapıyorum."
+      : preferredLanguage === "ku"
+        ? "سڵاو، من جارڤیسم. ئەمە تاقیکردنەوەی دەنگە."
+        : "Hello, I am JARVIS. This is a voice test.";
+
+  await speakText(sample);
+});
+
+saveAccountBtn?.addEventListener("click", saveLocalAccount);
+logoutAccountBtn?.addEventListener("click", logoutLocalAccount);
+
+if ("speechSynthesis" in window) {
+  window.speechSynthesis.addEventListener?.("voiceschanged", populateVoiceSelect);
+}
