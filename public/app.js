@@ -242,7 +242,7 @@ async function startLiveVoice() {
 
     dc.onopen = () => {
       setLiveUI(true);
-      statusEl.textContent = "Live Voice چالاکە — ڕاستەوخۆ قسە بکە";
+      statusEl.textContent = "Live Voice چالاکە — قسە بکە، JARVIS وەڵامت دەدات";
     };
 
     dc.onmessage = event => {
