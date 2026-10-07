@@ -90,7 +90,9 @@ async function askJarvis(text, { speak = false } = {}) {
       const reply =
         preferredLanguage === "tr"
           ? "Tamam, bilgisayarda açtım."
-          : "تەواو، لە کۆمپیوتەرەکەت کردمەتەوە.";
+          : preferredLanguage === "auto"
+            ? "Done. I opened it on your computer."
+            : "تەواو، لە کۆمپیوتەرەکەت کردمەتەوە.";
 
       add(reply, "ai");
       if (speak) await speakText(reply);
@@ -880,58 +882,39 @@ window.addEventListener("load", () => setTimeout(updateVoiceQualityHint, 300));
 
 
 function parsePcCommand(text) {
-  const t = String(text || "").toLowerCase().trim();
+  const raw = String(text || "").toLowerCase().trim();
+  const t = raw
+    .replace(/[.,!?;:]+/g, " ")
+    .replace(/\b(please|the|a|an|for me|can you|could you|would you)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
-  const rules = [
-    {
-      app: "notepad",
-      patterns: [
-        "open notepad",
-        "notepad aç",
-        "not defterini aç",
-        "نۆتپاد بکەرەوە",
-        "نۆت پاد بکەرەوە"
-      ]
-    },
-    {
-      app: "calculator",
-      patterns: [
-        "open calculator",
-        "calculator aç",
-        "hesap makinesini aç",
-        "hesap makinesi aç",
-        "کالکیولەیتەر بکەرەوە",
-        "حیسابکەر بکەرەوە"
-      ]
-    },
-    {
-      app: "explorer",
-      patterns: [
-        "open file explorer",
-        "file explorer aç",
-        "dosya gezginini aç",
-        "dosya gezgini aç",
-        "فایل ئێکسپلۆرەر بکەرەوە",
-        "فایل ئەکسپلۆرەر بکەرەوە"
-      ]
-    },
-    {
-      app: "settings",
-      patterns: [
-        "open settings",
-        "settings aç",
-        "ayarları aç",
-        "ayarlar aç",
-        "سێتینگ بکەرەوە",
-        "ڕێکخستنەکان بکەرەوە"
-      ]
-    }
-  ];
+  const hasOpenVerb =
+    /\b(open|launch|start|run)\b/.test(t) ||
+    /\b(aç|açar mısın|açarmısın|başlat|çalıştır)\b/.test(raw) ||
+    /(بکەرەوە|بکەوە|بکەرەوەی)/.test(raw);
 
-  for (const rule of rules) {
-    if (rule.patterns.some(p => t.includes(p))) {
-      return { type: "open-app", app: rule.app };
-    }
+  const target =
+    /\b(notepad|not defteri|not defterini)\b/.test(t)
+      ? "notepad"
+      : /\b(calculator|hesap makinesi|hesap makinesini)\b/.test(t)
+        ? "calculator"
+        : /\b(file explorer|explorer|dosya gezgini|dosya gezginini)\b/.test(t)
+          ? "explorer"
+          : /\b(settings|ayarlar|ayarları)\b/.test(t)
+            ? "settings"
+            : /(نۆتپاد|نۆت پاد)/.test(raw)
+              ? "notepad"
+              : /(کالکیولەیتەر|حیسابکەر)/.test(raw)
+                ? "calculator"
+                : /(فایل ئێکسپلۆرەر|فایل ئەکسپلۆرەر)/.test(raw)
+                  ? "explorer"
+                  : /(سێتینگ|ڕێکخستنەکان)/.test(raw)
+                    ? "settings"
+                    : null;
+
+  if (hasOpenVerb && target) {
+    return { type: "open-app", app: target };
   }
 
   return null;
