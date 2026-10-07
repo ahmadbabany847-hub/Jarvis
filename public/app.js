@@ -14,6 +14,7 @@ const voicePitch = document.getElementById("voicePitch");
 const voiceRateValue = document.getElementById("voiceRateValue");
 const voicePitchValue = document.getElementById("voicePitchValue");
 const testVoiceBtn = document.getElementById("testVoice");
+const naturalVoiceBtn = document.getElementById("naturalVoice");
 const accountName = document.getElementById("accountName");
 const accountEmail = document.getElementById("accountEmail");
 const saveAccountBtn = document.getElementById("saveAccount");
@@ -23,8 +24,20 @@ const history = [];
 
 let preferredLanguage = localStorage.getItem("jarvis-language") || "auto";
 let preferredVoiceURI = localStorage.getItem("jarvis-voice-uri") || "";
-let preferredRate = Number(localStorage.getItem("jarvis-voice-rate") || "0.92");
-let preferredPitch = Number(localStorage.getItem("jarvis-voice-pitch") || "0.88");
+let preferredRate = Number(localStorage.getItem("jarvis-voice-rate") || "0.96");
+let preferredPitch = Number(localStorage.getItem("jarvis-voice-pitch") || "1.00");
+
+if (
+  localStorage.getItem("jarvis-voice-natural-v2") !== "1" &&
+  preferredRate === 0.92 &&
+  preferredPitch === 0.88
+) {
+  preferredRate = 0.96;
+  preferredPitch = 1.00;
+  localStorage.setItem("jarvis-voice-rate", String(preferredRate));
+  localStorage.setItem("jarvis-voice-pitch", String(preferredPitch));
+  localStorage.setItem("jarvis-voice-natural-v2", "1");
+}
 
 let dictationRecorder = null;
 let dictationStream = null;
@@ -462,20 +475,38 @@ async function speakText(text) {
   const savedVoice = voices.find(v => v.voiceURI === preferredVoiceURI);
   const voice = savedVoice || chooseVoice(voices, language);
 
-  return new Promise(resolve => {
-    const utterance = new SpeechSynthesisUtterance(cleanSpeechText(text));
-    utterance.lang = language;
+  const cleaned = cleanSpeechText(text);
+  const chunks = splitForNaturalSpeech(cleaned);
 
+  for (const chunk of chunks) {
+    await speakChunk(chunk, language, voice);
+  }
+}
+
+function speakChunk(text, language, voice) {
+  return new Promise(resolve => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = language;
     utterance.rate = preferredRate;
     utterance.pitch = preferredPitch;
+    utterance.volume = 1;
 
     if (voice) utterance.voice = voice;
 
-    utterance.onend = resolve;
+    utterance.onend = () => setTimeout(resolve, 45);
     utterance.onerror = resolve;
 
     window.speechSynthesis.speak(utterance);
   });
+}
+
+function splitForNaturalSpeech(text) {
+  const chunks = String(text || "")
+    .split(/(?<=[.!?…])\s+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  return chunks.length ? chunks : [String(text || "").trim()];
 }
 
 function getSpeechVoices() {
@@ -512,7 +543,11 @@ function chooseVoice(voices, language) {
   if (!candidates.length) return null;
 
   if (base === "tr") {
+    const qualityPattern = /(premium|enhanced|natural|siri|yelda|cem|turkish)/i;
+
     return (
+      candidates.find(v => qualityPattern.test(v.name || "") && v.localService) ||
+      candidates.find(v => qualityPattern.test(v.name || "")) ||
       candidates.find(v => v.localService) ||
       candidates.find(v => v.default) ||
       candidates[0]
@@ -724,3 +759,34 @@ logoutAccountBtn?.addEventListener("click", logoutLocalAccount);
 if ("speechSynthesis" in window) {
   window.speechSynthesis.addEventListener?.("voiceschanged", populateVoiceSelect);
 }
+
+
+naturalVoiceBtn?.addEventListener("click", async () => {
+  preferredRate = preferredLanguage === "tr" ? 0.96 : 0.98;
+  preferredPitch = 1.00;
+
+  localStorage.setItem("jarvis-voice-rate", String(preferredRate));
+  localStorage.setItem("jarvis-voice-pitch", String(preferredPitch));
+  localStorage.setItem("jarvis-voice-natural-v2", "1");
+
+  if (voiceRate) voiceRate.value = String(preferredRate);
+  if (voicePitch) voicePitch.value = String(preferredPitch);
+  if (voiceRateValue) voiceRateValue.textContent = preferredRate.toFixed(2);
+  if (voicePitchValue) voicePitchValue.textContent = preferredPitch.toFixed(2);
+
+  const voices = await getSpeechVoices();
+  const language = preferredLanguage === "tr" ? "tr-TR" : preferredLanguage === "ku" ? "ku" : "en-US";
+  const best = chooseVoice(voices, language);
+
+  if (best) {
+    preferredVoiceURI = best.voiceURI;
+    localStorage.setItem("jarvis-voice-uri", preferredVoiceURI);
+    if (voiceSelect) voiceSelect.value = preferredVoiceURI;
+  }
+
+  await speakText(
+    preferredLanguage === "tr"
+      ? "Merhaba, şimdi daha doğal ve akıcı konuşuyorum."
+      : "سڵاو، ئێستا بە شێوەیەکی سروشتیتر قسە دەکەم."
+  );
+});
