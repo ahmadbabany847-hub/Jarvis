@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ku" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#05080d" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="JARVIS" />
+  <title>JARVIS AI</title>
+  <style>
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%;background:#05080d;color:#eef7ff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    body{min-height:100dvh}
+    .app{max-width:760px;margin:auto;min-height:100dvh;display:flex;flex-direction:column;padding:calc(env(safe-area-inset-top) + 10px) 14px calc(env(safe-area-inset-bottom) + 8px);background:radial-gradient(circle at 50% -8%,rgba(42,151,196,.22),transparent 34%),linear-gradient(180deg,#070b11,#05080d)}
+    header{display:flex;align-items:center;justify-content:space-between;min-height:68px;border-bottom:1px solid #1d2c38}
+    .brand{display:flex;align-items:center;gap:12px}
+    .orb{width:44px;height:44px;border-radius:50%;border:1px solid #42d7ff;box-shadow:0 0 18px rgba(66,215,255,.2);position:relative}
+    .orb:after{content:"";position:absolute;inset:17px;border-radius:50%;background:#42d7ff;box-shadow:0 0 13px #42d7ff}
+    h1{margin:0;font-size:18px;letter-spacing:4px}
+    .online{font-size:11px;color:#7f94a5;margin-top:4px}
+    .online b{display:inline-block;width:7px;height:7px;background:#39e69b;border-radius:50%;margin-left:5px;box-shadow:0 0 8px #39e69b}
+    #chat{flex:1;min-height:0;overflow-y:auto;padding:18px 0 14px;display:flex;flex-direction:column;gap:10px}
+    .welcome{text-align:center;margin:auto;color:#8094a3}
+    .welcome h2{color:#eef7ff}
+    .msg{max-width:88%;padding:12px 14px;border-radius:18px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}
+    .user{align-self:flex-start;background:#12334a;border:1px solid #1c506b;border-bottom-left-radius:5px}
+    .ai{align-self:flex-end;background:#101820;border:1px solid #1d2b36;border-bottom-right-radius:5px}
+    .quick{display:flex;gap:7px;overflow-x:auto;padding:4px 0 7px}
+    .quick button{flex:0 0 auto;border:1px solid #1d2c38;background:#0a1118;color:#9eb4c5;border-radius:18px;padding:8px 12px;font-size:12px}
+    form{display:flex;gap:8px;align-items:center;padding:5px 0}
+    input{flex:1;min-width:0;background:#0b1219;border:1px solid #1c2b36;color:#fff;border-radius:24px;padding:13px 16px;font-size:16px;outline:none}
+    button{cursor:pointer}
+    .round,.send{width:46px;height:46px;border-radius:50%;border:1px solid #223441;color:#e6f5ff;font-size:18px}
+    .round{background:#0a1219}.send{background:#12384d;border-color:#27617d}
+    .status{text-align:center;color:#536b7b;font-size:10px;min-height:16px}
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div class="brand">
+        <div class="orb"></div>
+        <div>
+          <h1>JARVIS</h1>
+          <div class="online"><b></b> Online</div>
+        </div>
+      </div>
+      <div>AI</div>
+    </header>
+
+    <section id="chat">
+      <div class="welcome" id="welcome">
+        <h2>سڵاو، من JARVIS ـم.</h2>
+        <p>فەرمانەکەت بنووسە یان بە دەنگ بڵێ.</p>
+      </div>
+    </section>
+
+    <section class="quick">
+      <button data-prompt="تۆ چی دەتوانیت بۆ من بکەیت؟">تواناکانت</button>
+      <button data-prompt="یارمەتیم بدە project ـێکی نوێ پلان بکەم.">Project</button>
+      <button data-prompt="Database ـێکی باش بۆ سیستەمێک پلان بکە.">Database</button>
+      <button data-prompt="نمونەی کۆدێکی پاک بۆم بنووسە.">Code</button>
+    </section>
+
+    <form id="form">
+      <button id="mic" type="button" class="round">🎙️</button>
+      <input id="input" autocomplete="off" placeholder="فەرمانەکەت بنووسە..." />
+      <button type="submit" class="send">➤</button>
+    </form>
+    <div id="status" class="status">JARVIS ئامادەیە</div>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
