@@ -6,6 +6,7 @@ const liveBtn = document.getElementById("liveVoice");
 const statusEl = document.getElementById("status");
 const welcome = document.getElementById("welcome");
 const history = [];
+let preferredLanguage = localStorage.getItem("jarvis-language") || "auto";
 
 let dictationRecorder = null;
 let dictationStream = null;
@@ -56,7 +57,7 @@ async function askJarvis(text, { speak = false } = {}) {
     const r = await fetch("/api/chat", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ messages: history })
+      body: JSON.stringify({ messages: history, language: preferredLanguage })
     });
 
     const data = await r.json();
@@ -108,7 +109,10 @@ function bestMimeType() {
 async function transcribeBlob(blob, type) {
   const r = await fetch("/api/transcribe", {
     method: "POST",
-    headers: { "content-type": type || blob.type || "application/octet-stream" },
+    headers: {
+      "content-type": type || blob.type || "application/octet-stream",
+      "x-jarvis-language": preferredLanguage
+    },
     body: blob
   });
 
@@ -434,7 +438,12 @@ function speakText(text) {
     window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
-    const language = detectSpeechLanguage(text);
+    const language =
+      preferredLanguage === "tr"
+        ? "tr-TR"
+        : preferredLanguage === "ku"
+          ? "ku"
+          : detectSpeechLanguage(text);
     utterance.lang = language;
     utterance.rate = 1.02;
     utterance.pitch = 0.92;
@@ -479,3 +488,26 @@ window.addEventListener("pagehide", () => {
   stopFreeLiveVoice();
   dictationStream?.getTracks().forEach(track => track.stop());
 });
+
+
+function updateLanguageUI() {
+  document.querySelectorAll("[data-language]").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.language === preferredLanguage);
+  });
+
+  if (preferredLanguage === "tr") {
+    statusEl.textContent = "Türkçe ses modu hazır — konuş";
+  } else if (preferredLanguage === "ku") {
+    statusEl.textContent = "دەنگی کوردی ئامادەیە — قسە بکە";
+  }
+}
+
+document.querySelectorAll("[data-language]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    preferredLanguage = btn.dataset.language || "auto";
+    localStorage.setItem("jarvis-language", preferredLanguage);
+    updateLanguageUI();
+  });
+});
+
+updateLanguageUI();
