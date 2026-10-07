@@ -1,4 +1,4 @@
-const MODEL = "@cf/meta/llama-3.1-8b-instruct";
+const MODEL = "@cf/google/gemma-4-26b-a4b-it";
 
 export default {
   async fetch(request, env) {
@@ -16,7 +16,10 @@ export default {
               content: "You are JARVIS, a helpful AI assistant. Reply mainly in Sorani Kurdish unless the user requests another language. Be concise and practical. Help with coding, projects, databases, and general questions. Never claim to have executed code or changed a real system unless you actually did."
             },
             ...incoming
-          ]
+          ],
+          chat_template_kwargs: {
+            enable_thinking: false
+          }
         });
 
         const response =
