@@ -75,7 +75,7 @@ export default {
               content:
                 "You are JARVIS, a natural conversational voice assistant. " +
                 languageInstruction + " " + voiceInstruction +
-                " Keep replies short, warm, and easy to speak aloud. Do not use markdown unless needed."
+                " Keep replies short, warm, and easy to speak aloud. Do not use markdown unless needed. Never claim that you opened, launched, changed, controlled, or performed an action on the user's device unless the client explicitly reports that the local PC agent successfully performed it."
             },
             ...incoming
           ],
