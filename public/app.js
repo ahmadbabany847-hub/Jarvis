@@ -20,7 +20,11 @@ const accountEmail = document.getElementById("accountEmail");
 const saveAccountBtn = document.getElementById("saveAccount");
 const logoutAccountBtn = document.getElementById("logoutAccount");
 const accountStatus = document.getElementById("accountStatus");
+const pcStatusEl = document.getElementById("pcStatus");
+const testPcBtn = document.getElementById("testPc");
 const history = [];
+
+const PC_AGENT_URL = "http://127.0.0.1:8765";
 
 let preferredLanguage = localStorage.getItem("jarvis-language") || "auto";
 let preferredVoiceURI = localStorage.getItem("jarvis-voice-uri") || "";
@@ -76,6 +80,32 @@ function add(text, who) {
 async function askJarvis(text, { speak = false } = {}) {
   text = String(text || "").trim();
   if (!text) return "";
+
+  const localCommand = parsePcCommand(text);
+  if (localCommand) {
+    add(text, "user");
+    const ok = await runPcCommand(localCommand);
+
+    if (ok) {
+      const reply =
+        preferredLanguage === "tr"
+          ? "Tamam, bilgisayarda açtım."
+          : "تەواو، لە کۆمپیوتەرەکەت کردمەتەوە.";
+
+      add(reply, "ai");
+      if (speak) await speakText(reply);
+      return reply;
+    }
+
+    const reply =
+      preferredLanguage === "tr"
+        ? "Bilgisayar ajanına bağlanamadım."
+        : "نەتوانرا بە JARVIS Agent ـی کۆمپیوتەر پەیوەست بم.";
+
+    add(reply, "ai");
+    if (speak) await speakText(reply);
+    return reply;
+  }
 
   add(text, "user");
   history.push({ role: "user", content: text });
@@ -847,3 +877,129 @@ function updateVoiceQualityHint() {
 
 voiceSelect?.addEventListener("change", updateVoiceQualityHint);
 window.addEventListener("load", () => setTimeout(updateVoiceQualityHint, 300));
+
+
+function parsePcCommand(text) {
+  const t = String(text || "").toLowerCase().trim();
+
+  const rules = [
+    {
+      app: "notepad",
+      patterns: [
+        "open notepad",
+        "notepad aç",
+        "not defterini aç",
+        "نۆتپاد بکەرەوە",
+        "نۆت پاد بکەرەوە"
+      ]
+    },
+    {
+      app: "calculator",
+      patterns: [
+        "open calculator",
+        "calculator aç",
+        "hesap makinesini aç",
+        "hesap makinesi aç",
+        "کالکیولەیتەر بکەرەوە",
+        "حیسابکەر بکەرەوە"
+      ]
+    },
+    {
+      app: "explorer",
+      patterns: [
+        "open file explorer",
+        "file explorer aç",
+        "dosya gezginini aç",
+        "dosya gezgini aç",
+        "فایل ئێکسپلۆرەر بکەرەوە",
+        "فایل ئەکسپلۆرەر بکەرەوە"
+      ]
+    },
+    {
+      app: "settings",
+      patterns: [
+        "open settings",
+        "settings aç",
+        "ayarları aç",
+        "ayarlar aç",
+        "سێتینگ بکەرەوە",
+        "ڕێکخستنەکان بکەرەوە"
+      ]
+    }
+  ];
+
+  for (const rule of rules) {
+    if (rule.patterns.some(p => t.includes(p))) {
+      return { type: "open-app", app: rule.app };
+    }
+  }
+
+  return null;
+}
+
+async function pcFetch(path, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2500);
+
+  try {
+    return await fetch(PC_AGENT_URL + path, {
+      ...options,
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function checkPcAgent() {
+  if (!pcStatusEl) return false;
+
+  pcStatusEl.textContent = "PC: پشکنین...";
+
+  try {
+    const r = await pcFetch("/status");
+    const data = await r.json();
+
+    if (!r.ok || !data.ok) throw new Error("Agent unavailable");
+
+    pcStatusEl.textContent = "🟢 PC Agent پەیوەستە";
+    pcStatusEl.classList.add("connected");
+    return true;
+  } catch {
+    pcStatusEl.textContent = "🔴 PC Agent پەیوەست نییە";
+    pcStatusEl.classList.remove("connected");
+    return false;
+  }
+}
+
+async function runPcCommand(command) {
+  try {
+    if (command.type === "open-app") {
+      const r = await pcFetch("/open-app", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ app: command.app })
+      });
+
+      const data = await r.json();
+      const ok = Boolean(r.ok && data.ok);
+
+      if (pcStatusEl) {
+        pcStatusEl.textContent = ok
+          ? "🟢 PC Agent پەیوەستە"
+          : "🔴 PC Agent هەڵەی هەیە";
+      }
+
+      return ok;
+    }
+  } catch {
+    if (pcStatusEl) {
+      pcStatusEl.textContent = "🔴 PC Agent پەیوەست نییە";
+    }
+  }
+
+  return false;
+}
+
+testPcBtn?.addEventListener("click", checkPcAgent);
+window.addEventListener("load", () => setTimeout(checkPcAgent, 500));
