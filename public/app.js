@@ -270,18 +270,35 @@ async function startLiveVoice() {
     };
 
     pc.onconnectionstatechange = () => {
-      if (["failed", "closed", "disconnected"].includes(pc.connectionState)) {
-        stopLiveVoice();
+      const state = pc.connectionState;
+      if (state === "connected") {
+        setLiveUI(true);
+        statusEl.textContent = "Live Voice چالاکە — قسە بکە";
+      } else if (state === "connecting") {
+        statusEl.textContent = "Live Voice پەیوەندی دروست دەکات...";
+      } else if (state === "failed" || state === "closed") {
+        statusEl.textContent = "Realtime voice connection " + state;
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      const state = pc.iceConnectionState;
+      if (state === "checking") {
+        statusEl.textContent = "Voice network پشکنین دەکرێت...";
+      } else if (state === "failed") {
+        statusEl.textContent = "ICE connection failed";
       }
     };
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
+    await waitForIceGatheringComplete(pc);
+
     const response = await fetch("/api/realtime", {
       method: "POST",
       headers: { "content-type": "application/sdp" },
-      body: offer.sdp
+      body: pc.localDescription?.sdp || offer.sdp
     });
 
     if (!response.ok) {
@@ -343,3 +360,25 @@ window.addEventListener("pagehide", () => {
   stopLiveVoice();
   recorderStream?.getTracks().forEach(track => track.stop());
 });
+
+
+function waitForIceGatheringComplete(peer) {
+  if (peer.iceGatheringState === "complete") return Promise.resolve();
+
+  return new Promise(resolve => {
+    const timeout = setTimeout(() => {
+      peer.removeEventListener("icegatheringstatechange", check);
+      resolve();
+    }, 2500);
+
+    function check() {
+      if (peer.iceGatheringState === "complete") {
+        clearTimeout(timeout);
+        peer.removeEventListener("icegatheringstatechange", check);
+        resolve();
+      }
+    }
+
+    peer.addEventListener("icegatheringstatechange", check);
+  });
+}
