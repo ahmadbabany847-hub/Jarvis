@@ -1,37 +1,73 @@
-const MODEL = "@cf/google/gemma-4-26b-a4b-it";
-const STT_MODEL = "@cf/openai/whisper-large-v3-turbo";
+const TEXT_MODEL = "@cf/google/gemma-4-26b-a4b-it";
+const REALTIME_MODEL = "gpt-realtime-2.1";
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    if (url.pathname === "/api/transcribe" && request.method === "POST") {
-      try {
-        const audioBuffer = await request.arrayBuffer();
+    if (url.pathname === "/api/realtime" && request.method === "POST") {
+      if (!env.OPENAI_API_KEY) {
+        return Response.json(
+          { error: "OPENAI_API_KEY secret is not configured in Cloudflare." },
+          { status: 500 }
+        );
+      }
 
-        if (!audioBuffer || audioBuffer.byteLength === 0) {
-          return Response.json({ error: "No audio received" }, { status: 400 });
+      try {
+        const sdp = await request.text();
+
+        const session = {
+          type: "realtime",
+          model: REALTIME_MODEL,
+          output_modalities: ["audio"],
+          instructions:
+            "You are JARVIS, a natural realtime voice assistant. Speak mainly in Sorani Kurdish unless the user asks for another language. Keep replies concise, friendly, and conversational. Let the user interrupt you naturally. Help with coding, projects, databases, planning, and general questions.",
+          audio: {
+            input: {
+              turn_detection: {
+                type: "semantic_vad",
+                eagerness: "auto",
+                create_response: true,
+                interrupt_response: true
+              }
+            },
+            output: {
+              voice: "marin"
+            }
+          }
+        };
+
+        const form = new FormData();
+        form.set("sdp", sdp);
+        form.set("session", JSON.stringify(session));
+
+        const openaiResponse = await fetch(
+          "https://api.openai.com/v1/realtime/calls",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+              "OpenAI-Safety-Identifier": "jarvis-web-user"
+            },
+            body: form
+          }
+        );
+
+        if (!openaiResponse.ok) {
+          const details = await openaiResponse.text();
+          return new Response(details || "Realtime session failed", {
+            status: openaiResponse.status,
+            headers: { "content-type": "text/plain; charset=utf-8" }
+          });
         }
 
-        const audioBase64 = arrayBufferToBase64(audioBuffer);
-
-        const result = await env.AI.run(STT_MODEL, {
-          audio: audioBase64,
-          task: "transcribe",
-          vad_filter: true,
-          initial_prompt: "The speaker may speak Sorani Kurdish, Arabic, Turkish, or English."
+        return new Response(await openaiResponse.text(), {
+          status: 200,
+          headers: { "content-type": "application/sdp" }
         });
-
-        const text =
-          result?.text ??
-          result?.response ??
-          result?.result?.text ??
-          "";
-
-        return Response.json({ text: String(text || "").trim() });
       } catch (error) {
         return Response.json(
-          { error: error?.message || "Transcription failed" },
+          { error: error?.message || "Realtime connection failed" },
           { status: 500 }
         );
       }
@@ -40,13 +76,16 @@ export default {
     if (url.pathname === "/api/chat" && request.method === "POST") {
       try {
         const body = await request.json();
-        const incoming = Array.isArray(body.messages) ? body.messages.slice(-20) : [];
+        const incoming = Array.isArray(body.messages)
+          ? body.messages.slice(-20)
+          : [];
 
-        const result = await env.AI.run(MODEL, {
+        const result = await env.AI.run(TEXT_MODEL, {
           messages: [
             {
               role: "system",
-              content: "You are JARVIS, a helpful AI assistant. Reply mainly in Sorani Kurdish unless the user requests another language. Be concise and practical. Help with coding, projects, databases, and general questions. Never claim to have executed code or changed a real system unless you actually did."
+              content:
+                "You are JARVIS, a helpful AI assistant. Reply mainly in Sorani Kurdish unless the user requests another language. Be concise and practical."
             },
             ...incoming
           ],
@@ -73,15 +112,3 @@ export default {
     return env.ASSETS.fetch(request);
   }
 };
-
-function arrayBufferToBase64(buffer) {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  const chunk = 0x8000;
-
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-
-  return btoa(binary);
-}
