@@ -28,6 +28,9 @@
     .ai{align-self:flex-end;background:#101820;border:1px solid #1d2b36;border-bottom-right-radius:5px}
     .quick{display:flex;gap:7px;overflow-x:auto;padding:4px 0 7px}
     .quick button{flex:0 0 auto;border:1px solid #1d2c38;background:#0a1118;color:#9eb4c5;border-radius:18px;padding:8px 12px;font-size:12px}
+    .languages{display:flex;gap:7px;justify-content:flex-start;padding:0 0 6px}
+    .languages button{border:1px solid #1d2c38;background:#0a1118;color:#9eb4c5;border-radius:18px;padding:7px 11px;font-size:12px}
+    .languages button.active{background:#103243;border-color:#35cfff;color:#eef7ff}
     form{display:flex;gap:8px;align-items:center;padding:5px 0}
     input{flex:1;min-width:0;background:#0b1219;border:1px solid #1c2b36;color:#fff;border-radius:24px;padding:13px 16px;font-size:16px;outline:none}
     button{cursor:pointer}
@@ -66,6 +69,12 @@
       <button data-prompt="نمونەی کۆدێکی پاک بۆم بنووسە.">Code</button>
     </section>
 
+    <section class="languages">
+      <button type="button" data-language="auto">🌐 Auto</button>
+      <button type="button" data-language="ku">کوردی</button>
+      <button type="button" data-language="tr">🇹🇷 Türkçe Ses</button>
+    </section>
+
     <form id="form">
       <div class="voice-tools">
         <button id="dictation" type="button" class="round" aria-label="Voice typing" title="Voice typing">🎙️</button>
@@ -75,9 +84,9 @@
       <button type="submit" class="send">➤</button>
     </form>
 
-    <div id="status" class="status">v-freevoice-1 • ◉ = گفتوگۆی دەنگی بێ پارە</div>
+    <div id="status" class="status">v-freevoice-2 • ◉ = گفتوگۆی دەنگی بێ پارە</div>
   </main>
 
-  <script src="/app.js?v=20261008-freevoice-1"></script>
+  <script src="/app.js?v=20261008-freevoice-2"></script>
 </body>
 </html>
