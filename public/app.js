@@ -285,8 +285,25 @@ async function startLiveVoice() {
     });
 
     if (!response.ok) {
-      const message = await response.text();
-      throw new Error(message || "Realtime connection failed");
+      const raw = await response.text();
+      let detail = raw;
+      let code = "";
+
+      try {
+        const parsed = JSON.parse(raw);
+        detail = parsed?.error || raw;
+        code = parsed?.code || "";
+      } catch {}
+
+      if (code === "invalid_key") {
+        throw new Error("INVALID_API_KEY");
+      }
+
+      if (code === "quota_or_rate_limit") {
+        throw new Error("API_QUOTA");
+      }
+
+      throw new Error(detail || "Realtime connection failed");
     }
 
     await pc.setRemoteDescription({
@@ -300,10 +317,14 @@ async function startLiveVoice() {
     const message = String(error?.message || "");
     if (message.includes("OPENAI_API_KEY")) {
       statusEl.textContent = "OPENAI_API_KEY لە Cloudflare دانەنراوە";
+    } else if (message.includes("INVALID_API_KEY")) {
+      statusEl.textContent = "OpenAI API key دروست نییە";
+    } else if (message.includes("API_QUOTA")) {
+      statusEl.textContent = "OpenAI API billing/credit پێویستە";
     } else if (error?.name === "NotAllowedError") {
       statusEl.textContent = "ڕێگە بە Microphone بدە";
     } else {
-      statusEl.textContent = "Realtime voice پەیوەست نەبوو";
+      statusEl.textContent = "Realtime voice error: " + message.slice(0, 90);
     }
   }
 }
