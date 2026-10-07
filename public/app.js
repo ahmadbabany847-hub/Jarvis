@@ -1,7 +1,8 @@
 const chat = document.getElementById("chat");
 const form = document.getElementById("form");
 const input = document.getElementById("input");
-const mic = document.getElementById("mic");
+const dictationBtn = document.getElementById("dictation");
+const liveBtn = document.getElementById("liveVoice");
 const statusEl = document.getElementById("status");
 const welcome = document.getElementById("welcome");
 const history = [];
@@ -11,6 +12,11 @@ let dc = null;
 let localStream = null;
 let remoteAudio = null;
 let liveActive = false;
+
+let recorder = null;
+let recorderStream = null;
+let audioChunks = [];
+let dictating = false;
 
 function add(text, who) {
   if (welcome) welcome.remove();
@@ -41,7 +47,6 @@ async function sendMessage(text) {
     });
 
     const data = await r.json();
-
     if (!r.ok) throw new Error(data.error || "AI request failed");
 
     const answer = data.response || "وەڵامێک نەگەیشت.";
@@ -65,10 +70,112 @@ document.querySelectorAll(".quick button").forEach(btn => {
   btn.addEventListener("click", () => sendMessage(btn.dataset.prompt || ""));
 });
 
+async function startDictation() {
+  if (liveActive || pc) {
+    statusEl.textContent = "سەرەتا Live Voice بوەستێنە";
+    return;
+  }
+
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    statusEl.textContent = "Voice typing لەم browser ـەدا پشتگیری ناکرێت";
+    return;
+  }
+
+  try {
+    recorderStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioChunks = [];
+
+    const preferred = [
+      "audio/mp4",
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/ogg;codecs=opus"
+    ];
+    const mimeType = preferred.find(type =>
+      MediaRecorder.isTypeSupported ? MediaRecorder.isTypeSupported(type) : false
+    );
+
+    recorder = new MediaRecorder(
+      recorderStream,
+      mimeType ? { mimeType } : undefined
+    );
+
+    recorder.ondataavailable = event => {
+      if (event.data?.size) audioChunks.push(event.data);
+    };
+
+    recorder.onstop = async () => {
+      dictating = false;
+      dictationBtn.classList.remove("active");
+      dictationBtn.textContent = "🎙️";
+
+      const type = recorder.mimeType || audioChunks[0]?.type || "audio/mp4";
+      const blob = new Blob(audioChunks, { type });
+
+      recorderStream?.getTracks().forEach(track => track.stop());
+      recorderStream = null;
+
+      if (!blob.size) {
+        statusEl.textContent = "هیچ دەنگێک تۆمار نەکرا";
+        return;
+      }
+
+      statusEl.textContent = "دەنگەکەت دەگۆڕم بۆ نووسین...";
+
+      try {
+        const r = await fetch("/api/transcribe", {
+          method: "POST",
+          headers: { "content-type": type },
+          body: blob
+        });
+
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || "Transcription failed");
+
+        const text = (data.text || "").trim();
+        if (!text) {
+          statusEl.textContent = "دەنگەکەت ڕوون نەبوو";
+          return;
+        }
+
+        input.value = input.value
+          ? `${input.value.trim()} ${text}`
+          : text;
+        input.focus();
+        statusEl.textContent = "دەنگەکەت نووسرایەوە — Send دابگرە";
+      } catch {
+        statusEl.textContent = "نەتوانرا دەنگەکەت بنووسرێتەوە";
+      }
+    };
+
+    recorder.start();
+    dictating = true;
+    dictationBtn.classList.add("active");
+    dictationBtn.textContent = "⏹";
+    statusEl.textContent = "قسە بکە... دووبارە mic دابگرە بۆ وەستاندن";
+  } catch (error) {
+    statusEl.textContent =
+      error?.name === "NotAllowedError"
+        ? "ڕێگە بە Microphone بدە"
+        : "Microphone نەکرایەوە";
+  }
+}
+
+function stopDictation() {
+  if (recorder && dictating && recorder.state !== "inactive") {
+    statusEl.textContent = "دەنگەکەت دەنێرم...";
+    recorder.stop();
+  }
+}
+
 function setLiveUI(active) {
   liveActive = active;
-  mic.textContent = active ? "⏹" : "🎙️";
-  mic.setAttribute("aria-label", active ? "Stop live voice" : "Start live voice");
+  liveBtn.classList.toggle("active", active);
+  liveBtn.textContent = active ? "⏹" : "◉";
+  liveBtn.setAttribute(
+    "aria-label",
+    active ? "Stop live voice" : "Start live voice"
+  );
 }
 
 function stopLiveVoice() {
@@ -76,17 +183,14 @@ function stopLiveVoice() {
     try { dc.close(); } catch {}
     dc = null;
   }
-
   if (pc) {
     try { pc.close(); } catch {}
     pc = null;
   }
-
   if (localStream) {
     localStream.getTracks().forEach(track => track.stop());
     localStream = null;
   }
-
   if (remoteAudio) {
     remoteAudio.srcObject = null;
     remoteAudio.remove();
@@ -98,6 +202,11 @@ function stopLiveVoice() {
 }
 
 async function startLiveVoice() {
+  if (dictating) {
+    statusEl.textContent = "سەرەتا Voice typing بوەستێنە";
+    return;
+  }
+
   if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
     statusEl.textContent = "Realtime voice لەم browser ـەدا پشتگیری ناکرێت";
     return;
@@ -133,7 +242,7 @@ async function startLiveVoice() {
 
     dc.onopen = () => {
       setLiveUI(true);
-      statusEl.textContent = "JARVIS گوێ دەگرێت... قسە بکە";
+      statusEl.textContent = "Live Voice چالاکە — ڕاستەوخۆ قسە بکە";
     };
 
     dc.onmessage = event => {
@@ -180,12 +289,10 @@ async function startLiveVoice() {
       throw new Error(message || "Realtime connection failed");
     }
 
-    const answer = {
+    await pc.setRemoteDescription({
       type: "answer",
       sdp: await response.text()
-    };
-
-    await pc.setRemoteDescription(answer);
+    });
   } catch (error) {
     console.error(error);
     stopLiveVoice();
@@ -201,12 +308,17 @@ async function startLiveVoice() {
   }
 }
 
-mic.addEventListener("click", () => {
-  if (liveActive || pc) {
-    stopLiveVoice();
-  } else {
-    startLiveVoice();
-  }
+dictationBtn.addEventListener("click", () => {
+  if (dictating) stopDictation();
+  else startDictation();
 });
 
-window.addEventListener("pagehide", stopLiveVoice);
+liveBtn.addEventListener("click", () => {
+  if (liveActive || pc) stopLiveVoice();
+  else startLiveVoice();
+});
+
+window.addEventListener("pagehide", () => {
+  stopLiveVoice();
+  recorderStream?.getTracks().forEach(track => track.stop());
+});
