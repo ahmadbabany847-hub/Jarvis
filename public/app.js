@@ -428,38 +428,91 @@ function stopFreeLiveVoice() {
   statusEl.textContent = "JARVIS ئامادەیە";
 }
 
-function speakText(text) {
+async function speakText(text) {
+  if (!("speechSynthesis" in window)) return;
+
+  window.speechSynthesis.cancel();
+
+  const language =
+    preferredLanguage === "tr"
+      ? "tr-TR"
+      : preferredLanguage === "ku"
+        ? "ku"
+        : detectSpeechLanguage(text);
+
+  const voices = await getSpeechVoices();
+  const voice = chooseVoice(voices, language);
+
   return new Promise(resolve => {
-    if (!("speechSynthesis" in window)) {
-      resolve();
-      return;
+    const utterance = new SpeechSynthesisUtterance(cleanSpeechText(text));
+    utterance.lang = language;
+
+    if (preferredLanguage === "tr") {
+      utterance.rate = 0.92;
+      utterance.pitch = 0.88;
+    } else {
+      utterance.rate = 0.98;
+      utterance.pitch = 0.92;
     }
 
-    window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    const language =
-      preferredLanguage === "tr"
-        ? "tr-TR"
-        : preferredLanguage === "ku"
-          ? "ku"
-          : detectSpeechLanguage(text);
-    utterance.lang = language;
-    utterance.rate = 1.02;
-    utterance.pitch = 0.92;
-
-    const voices = window.speechSynthesis.getVoices();
-    const exact = voices.find(v =>
-      v.lang?.toLowerCase().startsWith(language.toLowerCase().split("-")[0])
-    );
-
-    if (exact) utterance.voice = exact;
+    if (voice) utterance.voice = voice;
 
     utterance.onend = resolve;
     utterance.onerror = resolve;
 
     window.speechSynthesis.speak(utterance);
   });
+}
+
+function getSpeechVoices() {
+  const current = window.speechSynthesis.getVoices();
+  if (current.length) return Promise.resolve(current);
+
+  return new Promise(resolve => {
+    let done = false;
+
+    const finish = () => {
+      if (done) return;
+      done = true;
+      window.speechSynthesis.removeEventListener("voiceschanged", finish);
+      resolve(window.speechSynthesis.getVoices());
+    };
+
+    window.speechSynthesis.addEventListener("voiceschanged", finish, { once: true });
+    setTimeout(finish, 1200);
+  });
+}
+
+function chooseVoice(voices, language) {
+  if (!Array.isArray(voices) || !voices.length) return null;
+
+  const wanted = language.toLowerCase();
+  const base = wanted.split("-")[0];
+
+  const exact = voices.filter(v => (v.lang || "").toLowerCase() === wanted);
+  const baseMatches = voices.filter(v =>
+    (v.lang || "").toLowerCase().startsWith(base)
+  );
+
+  const candidates = exact.length ? exact : baseMatches;
+  if (!candidates.length) return null;
+
+  if (base === "tr") {
+    return (
+      candidates.find(v => v.localService) ||
+      candidates.find(v => v.default) ||
+      candidates[0]
+    );
+  }
+
+  return candidates.find(v => v.default) || candidates[0];
+}
+
+function cleanSpeechText(text) {
+  return String(text || "")
+    .replace(/[*_#`~>]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function detectSpeechLanguage(text) {
