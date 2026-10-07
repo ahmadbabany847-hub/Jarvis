@@ -6,8 +6,10 @@ const statusEl = document.getElementById("status");
 const welcome = document.getElementById("welcome");
 const history = [];
 
-let recognition = null;
-let isListening = false;
+let mediaRecorder = null;
+let mediaStream = null;
+let audioChunks = [];
+let isRecording = false;
 let voiceReplies = true;
 
 function add(text, who) {
@@ -119,58 +121,123 @@ if ("speechSynthesis" in window) {
   window.speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
 }
 
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+async function startRecording() {
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    statusEl.textContent = "ئەم browser ـە voice recording پشتگیری ناکات";
+    return;
+  }
 
-if (SpeechRecognition) {
-  recognition = new SpeechRecognition();
-  recognition.lang = "ku-IQ";
-  recognition.interimResults = false;
-  recognition.continuous = false;
-  recognition.maxAlternatives = 1;
-
-  recognition.onstart = () => {
-    isListening = true;
-    mic.textContent = "⏹";
-    statusEl.textContent = "گوێم لێتە...";
-  };
-
-  recognition.onresult = e => {
-    const spokenText = e.results?.[0]?.[0]?.transcript || "";
-    if (spokenText) sendMessage(spokenText);
-  };
-
-  recognition.onerror = event => {
-    isListening = false;
-    mic.textContent = "🎙️";
-    statusEl.textContent =
-      event.error === "not-allowed"
-        ? "ڕێگە بە Microphone بدە"
-        : "نەتوانرا دەنگ بخوێندرێتەوە";
-  };
-
-  recognition.onend = () => {
-    isListening = false;
-    mic.textContent = "🎙️";
-    if (statusEl.textContent === "گوێم لێتە...") {
-      statusEl.textContent = "JARVIS ئامادەیە";
-    }
-  };
-
-  mic.addEventListener("click", () => {
+  try {
     if ("speechSynthesis" in window) speechSynthesis.cancel();
 
-    try {
-      if (isListening) {
-        recognition.stop();
-      } else {
-        recognition.start();
-      }
-    } catch (e) {
-      statusEl.textContent = "دووبارە هەوڵ بدە";
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    let options = {};
+    const preferredTypes = [
+      "audio/mp4",
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/ogg;codecs=opus"
+    ];
+
+    const supportedType = preferredTypes.find(type =>
+      MediaRecorder.isTypeSupported ? MediaRecorder.isTypeSupported(type) : false
+    );
+
+    if (supportedType) {
+      options.mimeType = supportedType;
     }
-  });
-} else {
-  mic.addEventListener("click", () => {
-    statusEl.textContent = "Voice input لەم browser ـەدا پشتگیری ناکرێت";
-  });
+
+    audioChunks = [];
+    mediaRecorder = new MediaRecorder(mediaStream, options);
+
+    mediaRecorder.ondataavailable = event => {
+      if (event.data && event.data.size > 0) {
+        audioChunks.push(event.data);
+      }
+    };
+
+    mediaRecorder.onstop = async () => {
+      mic.textContent = "🎙️";
+      isRecording = false;
+
+      const mimeType =
+        mediaRecorder.mimeType ||
+        audioChunks[0]?.type ||
+        "audio/mp4";
+
+      const blob = new Blob(audioChunks, { type: mimeType });
+
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+        mediaStream = null;
+      }
+
+      if (!blob.size) {
+        statusEl.textContent = "هیچ دەنگێک تۆمار نەکرا";
+        return;
+      }
+
+      statusEl.textContent = "دەنگەکەت دەخوێنمەوە...";
+
+      try {
+        const r = await fetch("/api/transcribe", {
+          method: "POST",
+          headers: {
+            "content-type": mimeType
+          },
+          body: blob
+        });
+
+        const data = await r.json();
+
+        if (!r.ok) {
+          throw new Error(data.error || "Transcription failed");
+        }
+
+        const text = (data.text || "").trim();
+
+        if (!text) {
+          statusEl.textContent = "دەنگەکەت ڕوون نەبوو، دووبارە هەوڵ بدە";
+          return;
+        }
+
+        statusEl.textContent = "دەنگەکەت خوێندرایەوە";
+        sendMessage(text);
+      } catch (error) {
+        statusEl.textContent = "نەتوانرا دەنگ بخوێندرێتەوە";
+      }
+    };
+
+    mediaRecorder.onerror = () => {
+      isRecording = false;
+      mic.textContent = "🎙️";
+      statusEl.textContent = "کێشە لە تۆمارکردنی دەنگ هەیە";
+    };
+
+    mediaRecorder.start();
+    isRecording = true;
+    mic.textContent = "⏹";
+    statusEl.textContent = "گوێم لێتە... دووبارە mic دابگرە بۆ ناردن";
+  } catch (error) {
+    statusEl.textContent =
+      error?.name === "NotAllowedError"
+        ? "ڕێگە بە Microphone بدە لە Safari Settings"
+        : "Microphone نەکرایەوە";
+  }
 }
+
+function stopRecording() {
+  if (mediaRecorder && isRecording && mediaRecorder.state !== "inactive") {
+    statusEl.textContent = "دەنگەکەت دەنێرم...";
+    mediaRecorder.stop();
+  }
+}
+
+mic.addEventListener("click", () => {
+  if (isRecording) {
+    stopRecording();
+  } else {
+    startRecording();
+  }
+});
