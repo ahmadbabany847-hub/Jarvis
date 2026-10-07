@@ -6,11 +6,11 @@ const statusEl = document.getElementById("status");
 const welcome = document.getElementById("welcome");
 const history = [];
 
-let mediaRecorder = null;
-let mediaStream = null;
-let audioChunks = [];
-let isRecording = false;
-let voiceReplies = true;
+let pc = null;
+let dc = null;
+let localStream = null;
+let remoteAudio = null;
+let liveActive = false;
 
 function add(text, who) {
   if (welcome) welcome.remove();
@@ -22,58 +22,9 @@ function add(text, who) {
   return el;
 }
 
-function pickVoice() {
-  const voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
-  return (
-    voices.find(v => /^ku\b/i.test(v.lang)) ||
-    voices.find(v => /^ar-IQ$/i.test(v.lang)) ||
-    voices.find(v => /^ar\b/i.test(v.lang)) ||
-    voices.find(v => /^en-GB$/i.test(v.lang)) ||
-    voices.find(v => /^en\b/i.test(v.lang)) ||
-    voices[0] ||
-    null
-  );
-}
-
-function speak(text) {
-  if (!voiceReplies || !("speechSynthesis" in window) || !text) return;
-
-  speechSynthesis.cancel();
-
-  const utterance = new SpeechSynthesisUtterance(text);
-  const voice = pickVoice();
-
-  if (voice) {
-    utterance.voice = voice;
-    utterance.lang = voice.lang;
-  } else {
-    utterance.lang = "ar-IQ";
-  }
-
-  utterance.rate = 0.94;
-  utterance.pitch = 0.95;
-  utterance.volume = 1;
-
-  utterance.onstart = () => {
-    statusEl.textContent = "JARVIS قسە دەکات...";
-  };
-
-  utterance.onend = () => {
-    statusEl.textContent = "JARVIS ئامادەیە";
-  };
-
-  utterance.onerror = () => {
-    statusEl.textContent = "JARVIS ئامادەیە";
-  };
-
-  speechSynthesis.speak(utterance);
-}
-
 async function sendMessage(text) {
   text = text.trim();
   if (!text) return;
-
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
 
   add(text, "user");
   history.push({ role: "user", content: text });
@@ -91,17 +42,15 @@ async function sendMessage(text) {
 
     const data = await r.json();
 
-    if (!r.ok) {
-      throw new Error(data.error || "AI request failed");
-    }
+    if (!r.ok) throw new Error(data.error || "AI request failed");
 
-    const answer = data.response || data.error || "وەڵامێک نەگەیشت.";
+    const answer = data.response || "وەڵامێک نەگەیشت.";
     ai.textContent = answer;
     history.push({ role: "assistant", content: answer });
-
-    statusEl.textContent = "JARVIS وەڵامی دا";
-    speak(answer);
-  } catch (e) {
+    statusEl.textContent = liveActive
+      ? "JARVIS گوێ دەگرێت..."
+      : "JARVIS ئامادەیە";
+  } catch (error) {
     ai.textContent = "کێشەی پەیوەندی بە AI هەیە.";
     statusEl.textContent = "Connection error";
   }
@@ -116,128 +65,148 @@ document.querySelectorAll(".quick button").forEach(btn => {
   btn.addEventListener("click", () => sendMessage(btn.dataset.prompt || ""));
 });
 
-if ("speechSynthesis" in window) {
-  speechSynthesis.getVoices();
-  window.speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+function setLiveUI(active) {
+  liveActive = active;
+  mic.textContent = active ? "⏹" : "🎙️";
+  mic.setAttribute("aria-label", active ? "Stop live voice" : "Start live voice");
 }
 
-async function startRecording() {
-  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
-    statusEl.textContent = "ئەم browser ـە voice recording پشتگیری ناکات";
+function stopLiveVoice() {
+  if (dc) {
+    try { dc.close(); } catch {}
+    dc = null;
+  }
+
+  if (pc) {
+    try { pc.close(); } catch {}
+    pc = null;
+  }
+
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+    localStream = null;
+  }
+
+  if (remoteAudio) {
+    remoteAudio.srcObject = null;
+    remoteAudio.remove();
+    remoteAudio = null;
+  }
+
+  setLiveUI(false);
+  statusEl.textContent = "JARVIS ئامادەیە";
+}
+
+async function startLiveVoice() {
+  if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
+    statusEl.textContent = "Realtime voice لەم browser ـەدا پشتگیری ناکرێت";
     return;
   }
 
   try {
-    if ("speechSynthesis" in window) speechSynthesis.cancel();
+    statusEl.textContent = "پەیوەندی Voice دروست دەکەم...";
 
-    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-    let options = {};
-    const preferredTypes = [
-      "audio/mp4",
-      "audio/webm;codecs=opus",
-      "audio/webm",
-      "audio/ogg;codecs=opus"
-    ];
-
-    const supportedType = preferredTypes.find(type =>
-      MediaRecorder.isTypeSupported ? MediaRecorder.isTypeSupported(type) : false
-    );
-
-    if (supportedType) {
-      options.mimeType = supportedType;
-    }
-
-    audioChunks = [];
-    mediaRecorder = new MediaRecorder(mediaStream, options);
-
-    mediaRecorder.ondataavailable = event => {
-      if (event.data && event.data.size > 0) {
-        audioChunks.push(event.data);
+    localStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
       }
+    });
+
+    pc = new RTCPeerConnection();
+
+    remoteAudio = document.createElement("audio");
+    remoteAudio.autoplay = true;
+    remoteAudio.playsInline = true;
+    remoteAudio.style.display = "none";
+    document.body.appendChild(remoteAudio);
+
+    pc.ontrack = event => {
+      remoteAudio.srcObject = event.streams[0];
+      remoteAudio.play().catch(() => {});
     };
 
-    mediaRecorder.onstop = async () => {
-      mic.textContent = "🎙️";
-      isRecording = false;
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-      const mimeType =
-        mediaRecorder.mimeType ||
-        audioChunks[0]?.type ||
-        "audio/mp4";
+    dc = pc.createDataChannel("oai-events");
 
-      const blob = new Blob(audioChunks, { type: mimeType });
+    dc.onopen = () => {
+      setLiveUI(true);
+      statusEl.textContent = "JARVIS گوێ دەگرێت... قسە بکە";
+    };
 
-      if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
-        mediaStream = null;
-      }
-
-      if (!blob.size) {
-        statusEl.textContent = "هیچ دەنگێک تۆمار نەکرا";
+    dc.onmessage = event => {
+      let data;
+      try {
+        data = JSON.parse(event.data);
+      } catch {
         return;
       }
 
-      statusEl.textContent = "دەنگەکەت دەخوێنمەوە...";
-
-      try {
-        const r = await fetch("/api/transcribe", {
-          method: "POST",
-          headers: {
-            "content-type": mimeType
-          },
-          body: blob
-        });
-
-        const data = await r.json();
-
-        if (!r.ok) {
-          throw new Error(data.error || "Transcription failed");
-        }
-
-        const text = (data.text || "").trim();
-
-        if (!text) {
-          statusEl.textContent = "دەنگەکەت ڕوون نەبوو، دووبارە هەوڵ بدە";
-          return;
-        }
-
-        statusEl.textContent = "دەنگەکەت خوێندرایەوە";
-        sendMessage(text);
-      } catch (error) {
-        statusEl.textContent = "نەتوانرا دەنگ بخوێندرێتەوە";
+      if (data.type === "input_audio_buffer.speech_started") {
+        statusEl.textContent = "گوێم لێتە...";
+      } else if (data.type === "input_audio_buffer.speech_stopped") {
+        statusEl.textContent = "JARVIS بیر دەکاتەوە...";
+      } else if (data.type === "output_audio_buffer.started") {
+        statusEl.textContent = "JARVIS قسە دەکات...";
+      } else if (data.type === "output_audio_buffer.stopped") {
+        statusEl.textContent = "JARVIS گوێ دەگرێت...";
+      } else if (data.type === "response.output_audio_transcript.done") {
+        const transcript = (data.transcript || "").trim();
+        if (transcript) add(transcript, "ai");
+      } else if (data.type === "error") {
+        statusEl.textContent = data.error?.message || "Realtime voice error";
       }
     };
 
-    mediaRecorder.onerror = () => {
-      isRecording = false;
-      mic.textContent = "🎙️";
-      statusEl.textContent = "کێشە لە تۆمارکردنی دەنگ هەیە";
+    pc.onconnectionstatechange = () => {
+      if (["failed", "closed", "disconnected"].includes(pc.connectionState)) {
+        stopLiveVoice();
+      }
     };
 
-    mediaRecorder.start();
-    isRecording = true;
-    mic.textContent = "⏹";
-    statusEl.textContent = "گوێم لێتە... دووبارە mic دابگرە بۆ ناردن";
-  } catch (error) {
-    statusEl.textContent =
-      error?.name === "NotAllowedError"
-        ? "ڕێگە بە Microphone بدە لە Safari Settings"
-        : "Microphone نەکرایەوە";
-  }
-}
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
 
-function stopRecording() {
-  if (mediaRecorder && isRecording && mediaRecorder.state !== "inactive") {
-    statusEl.textContent = "دەنگەکەت دەنێرم...";
-    mediaRecorder.stop();
+    const response = await fetch("/api/realtime", {
+      method: "POST",
+      headers: { "content-type": "application/sdp" },
+      body: offer.sdp
+    });
+
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(message || "Realtime connection failed");
+    }
+
+    const answer = {
+      type: "answer",
+      sdp: await response.text()
+    };
+
+    await pc.setRemoteDescription(answer);
+  } catch (error) {
+    console.error(error);
+    stopLiveVoice();
+
+    const message = String(error?.message || "");
+    if (message.includes("OPENAI_API_KEY")) {
+      statusEl.textContent = "OPENAI_API_KEY لە Cloudflare دانەنراوە";
+    } else if (error?.name === "NotAllowedError") {
+      statusEl.textContent = "ڕێگە بە Microphone بدە";
+    } else {
+      statusEl.textContent = "Realtime voice پەیوەست نەبوو";
+    }
   }
 }
 
 mic.addEventListener("click", () => {
-  if (isRecording) {
-    stopRecording();
+  if (liveActive || pc) {
+    stopLiveVoice();
   } else {
-    startRecording();
+    startLiveVoice();
   }
 });
+
+window.addEventListener("pagehide", stopLiveVoice);
