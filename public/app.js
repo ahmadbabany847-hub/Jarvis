@@ -88,7 +88,11 @@ async function askJarvis(text, { speak = false } = {}) {
     const r = await fetch("/api/chat", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ messages: history, language: preferredLanguage })
+      body: JSON.stringify({
+        messages: history,
+        language: preferredLanguage,
+        voiceMode: Boolean(speak)
+      })
     });
 
     const data = await r.json();
@@ -493,7 +497,7 @@ function speakChunk(text, language, voice) {
 
     if (voice) utterance.voice = voice;
 
-    utterance.onend = () => setTimeout(resolve, 45);
+    utterance.onend = () => setTimeout(resolve, preferredLanguage === "tr" ? 85 : 55);
     utterance.onerror = resolve;
 
     window.speechSynthesis.speak(utterance);
@@ -543,25 +547,45 @@ function chooseVoice(voices, language) {
   if (!candidates.length) return null;
 
   if (base === "tr") {
-    const qualityPattern = /(premium|enhanced|natural|siri|yelda|cem|turkish)/i;
+    const qualityPattern = /(premium|enhanced|natural|siri|yelda|cem|turkish|türk|apple)/i;
+    const roboticPattern = /(compact|espeak|festival)/i;
 
-    return (
-      candidates.find(v => qualityPattern.test(v.name || "") && v.localService) ||
-      candidates.find(v => qualityPattern.test(v.name || "")) ||
-      candidates.find(v => v.localService) ||
-      candidates.find(v => v.default) ||
-      candidates[0]
-    );
+    const ranked = [...candidates].sort((a, b) => {
+      const score = v => {
+        const name = String(v.name || "");
+        let s = 0;
+        if (qualityPattern.test(name)) s += 6;
+        if ((v.lang || "").toLowerCase() === "tr-tr") s += 4;
+        if (v.localService) s += 3;
+        if (v.default) s += 1;
+        if (roboticPattern.test(name)) s -= 8;
+        return s;
+      };
+      return score(b) - score(a);
+    });
+
+    return ranked[0] || candidates[0];
   }
 
   return candidates.find(v => v.default) || candidates[0];
 }
 
 function cleanSpeechText(text) {
-  return String(text || "")
+  let out = String(text || "")
     .replace(/[*_#`~>]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+
+  if (preferredLanguage === "tr") {
+    out = out
+      .replace(/\s*[:;]\s*/g, ", ")
+      .replace(/\s*[–—]\s*/g, ", ")
+      .replace(/\s*\/\s*/g, " veya ")
+      .replace(/\s*&\s*/g, " ve ")
+      .replace(/\.{3,}/g, "…");
+  }
+
+  return out;
 }
 
 function detectSpeechLanguage(text) {
@@ -660,6 +684,7 @@ function openSettings() {
   if (!settingsModal) return;
   populateVoiceSelect();
   loadAccountUI();
+  setTimeout(updateVoiceQualityHint, 120);
 
   if (voiceRate) voiceRate.value = String(preferredRate);
   if (voicePitch) voicePitch.value = String(preferredPitch);
@@ -762,8 +787,14 @@ if ("speechSynthesis" in window) {
 
 
 naturalVoiceBtn?.addEventListener("click", async () => {
-  preferredRate = preferredLanguage === "tr" ? 0.96 : 0.98;
-  preferredPitch = 1.00;
+  const isAppleMobile =
+    /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+  preferredRate = preferredLanguage === "tr"
+    ? (isAppleMobile ? 0.94 : 0.96)
+    : 0.98;
+  preferredPitch = preferredLanguage === "tr" ? 0.98 : 1.00;
 
   localStorage.setItem("jarvis-voice-rate", String(preferredRate));
   localStorage.setItem("jarvis-voice-pitch", String(preferredPitch));
@@ -790,3 +821,29 @@ naturalVoiceBtn?.addEventListener("click", async () => {
       : "سڵاو، ئێستا بە شێوەیەکی سروشتیتر قسە دەکەم."
   );
 });
+
+
+function updateVoiceQualityHint() {
+  if (!voiceSelect) return;
+
+  const selected = voiceSelect.options[voiceSelect.selectedIndex];
+  const label = String(selected?.textContent || "");
+  let hint = document.getElementById("voiceQualityHint");
+
+  if (!hint) return;
+
+  if (preferredLanguage === "tr") {
+    if (/(premium|enhanced|natural|siri|yelda|cem|apple)/i.test(label)) {
+      hint.textContent = "✅ دەنگی تورکی سروشتی/بەرزکوالێتی هەڵبژێردراوە";
+    } else if (/tr-TR/i.test(label)) {
+      hint.textContent = "🟡 دەنگی تورکی هەیە، بەڵام Enhanced/Premium ئەگەر هەبێت سروشتیترە";
+    } else {
+      hint.textContent = "⚠️ دەنگی tr-TR نەدۆزرایەوە؛ لە iPhone Turkish voice دابەزێنە";
+    }
+  } else {
+    hint.textContent = "";
+  }
+}
+
+voiceSelect?.addEventListener("change", updateVoiceQualityHint);
+window.addEventListener("load", () => setTimeout(updateVoiceQualityHint, 300));
